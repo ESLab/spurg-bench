@@ -36,7 +36,9 @@ class LoadProcess:
         from Queue import Queue
         from threading import Thread
         from functools import partial
-        self.process = Popen([binary] + list(args), stdin=None, stdout=PIPE, bufsize=1, close_fds=True)
+        from os import setsid
+        self.process = Popen([binary] + list(args), stdin=None, stdout=PIPE, bufsize=1, close_fds=True, preexec_fn=setsid)
+
         self.queue = Queue()
         self.thread = Thread(target=partial(LoadProcess.enqueue_output, self))
         self.thread.daemon = True
@@ -54,6 +56,7 @@ def main():
     parser.add_argument('-n', nargs=1, default=[1], type=int)
     parser.add_argument('-a', nargs=1, default=['dont_set'], choices=['dont_set', 'set'])
     parser.add_argument('-l', nargs=1, default=[0.6], type=float)
+    parser.add_argument('-o', nargs=1, default=[0], type=int)
     args = parser.parse_args()
 
     n = args.n[0]
@@ -93,6 +96,13 @@ def main():
         else:
             print map(lambda l: (l[2], l[2] - l[3], l[4]), data)
             #print data
+            if args.o[0] > 0:
+                if sum(map(lambda l: l[4], data)) > args.o[0]:
+                    from os import killpg
+                    from signal import SIGTERM
+                    print 'Reached %i operations, exiting...' % args.o[0]
+                    map(lambda p: killpg(p.process.pid, SIGTERM), proc)
+                    return
 
 
 if __name__ == '__main__':
