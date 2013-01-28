@@ -84,10 +84,10 @@ def the_loop(proc, args):
 def main():
     from argparse import ArgumentParser
     parser = ArgumentParser()
-    parser.add_argument('-n', nargs=1, default=[1], type=int, description="Number of processes to start")
-    parser.add_argument('-a', nargs=1, default=['dont_set'], choices=['dont_set', 'set'], description="Affinity setting")
-    parser.add_argument('-l', nargs=1, default=[0.6], type=float, description="The load to set on processes")
-    parser.add_argument('-o', nargs=1, default=[0], type=int, description="Total number of operations to perform before exiting")
+    parser.add_argument('-n', nargs=1, default=[1], type=int, help="Number of processes to start")
+    parser.add_argument('-a', nargs=1, default=['dont_set'], choices=['dont_set', 'set'], help="Affinity setting")
+    parser.add_argument('-l', nargs=1, default=[0.6], type=float, help="The load to set on processes")
+    parser.add_argument('-o', nargs=1, default=[0], type=int, help="Total number of operations to perform before exiting")
     args = parser.parse_args()
 
     n = args.n[0]
