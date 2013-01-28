@@ -42,7 +42,11 @@
 #define MIN_SLEEP_LENGTH (0.001)
 #define MAX_SLEEP_LENGTH (0.002)
 
+#define LOOP_M 100
+
 #define RATIO (0.8)
+
+#define ALPHA_T_O (0.5)
 
 #define OUTER_LOOPS_PER_CYCLE 100
 #define INITIAL_INNER_LOOPS_PER_CYCLE 1
@@ -67,9 +71,9 @@ double get_double_rusage_time()
 int main(int argc, char **argv)
 {
 	int i, j;
-	int olpc = OUTER_LOOPS_PER_CYCLE;
-	int ilpc = INITIAL_INNER_LOOPS_PER_CYCLE;
-	double load_ratio = RATIO;
+	double	load_ratio = RATIO;
+	int	loop_m	   = LOOP_M;
+	int	loop_n	   = 1;
 
 	double ft1;
 	double ft2;
@@ -77,6 +81,8 @@ int main(int argc, char **argv)
 	double frt2;
 	double ft_diff;
 	double frt_diff;
+
+	double t_o = 0.0;
 	
 	double fdelay = 0.0;
 	double ftotal_delay = 0.0;
@@ -105,8 +111,8 @@ int main(int argc, char **argv)
 	while (1) {
 		ft1 = get_double_time();
 		frt1 = get_double_rusage_time();
-		for (op_i = 0; op_i < olpc; op_i++) {
-			for (j = 0; j < ilpc; j++) {
+		for (op_i = 0; op_i < loop_m; op_i++) {
+			for (j = 0; j < loop_n; j++) {
 				operation();
 			}
 			nanosleep(&delay, NULL);
@@ -114,49 +120,32 @@ int main(int argc, char **argv)
 		frt2 = get_double_rusage_time();
 		ft2 = get_double_time();
 
-		int lpc = ilpc * olpc;
-
-		total_nops += lpc;
+		total_nops += loop_m * loop_n;
 
 		ft_diff	 = ft2 - ft1;
 		frt_diff = frt2 - frt1;
-		double t_o = frt_diff / (double)lpc;
 
 		ftotal_time += ft_diff;
 
-		double ops = (double)lpc / ft_diff;
-
-		double error = fdelay * olpc - (frt_diff + fdelay*olpc);
-
-		/* printf("ft_diff = %f, frt_diff = %f, delay = %f, sum = %f, error = %f\n", */
-		/*        ft_diff, frt_diff, fdelay * olpc, frt_diff + fdelay*olpc, error); */
+		double ops = (double)(loop_m * loop_n) / ft_diff;
 
 		printf("%f, %f, %f, %f, %i\n", ft_diff, fdelay, ops, (double)total_nops / ftotal_time, total_nops);
 		fflush(stdout);
 
-		//ftotal_delay = ((1.0 - load_ratio)/load_ratio)*ft_diff;
+
+		double t_m = frt_diff;
+		//t_o = t_m / (double)(loop_m * loop_n);
+		t_o = ALPHA_T_O*(t_m / (double)(loop_m * loop_n)) + (1.0 - ALPHA_T_O)*t_o;
 		
-		double to_per_delay = frt_diff / olpc;
+		double k = (1-load_ratio)/load_ratio;
 
-		double delay_per_delay = (1.0 - load_ratio*to_per_delay/(1.0 - load_ratio));
+		double t_i = k * t_o;
 
-		//fdelay = ((double)ilpc*load_ratio - lpc)/(load_ratio + (double)olpc - 1) * frt_diff;
-		fdelay = (((double)ilpc*(1.0 - load_ratio))/load_ratio)*t_o;
+		loop_n = ceil(MIN_SLEEP_LENGTH/t_i);
 
-		if (fdelay < MIN_SLEEP_LENGTH) {
-			//ilpc = floor(ftotal_delay / (MIN_SLEEP_LENGTH * (double)olpc));
-			ilpc += MIN_SLEEP_LENGTH / fdelay;
-			//printf("fdelay too short, adjusted ilpc to %i.\n", ilpc);
-		} else if (fdelay > MAX_SLEEP_LENGTH) {
-			//ilpc = ceil(ftotal_delay / (MAX_SLEEP_LENGTH * (double)ilpc));
-			ilpc -= MAX_SLEEP_LENGTH / fdelay;
-			//printf("fdelay too long, adjusted ilpc to %i.\n", ilpc);
-		}
-		ilpc = ilpc <= 0 ? 1 : ilpc;
-		
-		lpc = ilpc * olpc;
+		fdelay = (double)loop_n * t_i;
 
-		fdelay = (((double)ilpc*(1.0 - load_ratio))/load_ratio)*t_o;
+		//printf("fdelay = %f, loop_n = %i, t_o = %f\n", fdelay, loop_n, t_o);
 
 		delay.tv_sec = fdelay;
 		delay.tv_nsec = fdelay*1000000000.0;
