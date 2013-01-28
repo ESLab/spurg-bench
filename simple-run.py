@@ -1,3 +1,4 @@
+#!/usr/bin/python
 # -*- coding: utf-8 -*-
 ###################################################################################
 # Copyright (c) 2013, Wictor Lund. All rights reserved.                           #
@@ -37,8 +38,9 @@ class LoadProcess:
         from threading import Thread
         from functools import partial
         from os import setsid
+        from datetime import datetime
         self.process = Popen([binary] + list(args), stdin=None, stdout=PIPE, bufsize=1, close_fds=True, preexec_fn=setsid)
-
+        self.start_time = datetime.now()
         self.queue = Queue()
         self.thread = Thread(target=partial(LoadProcess.enqueue_output, self))
         self.thread.daemon = True
@@ -50,36 +52,15 @@ class LoadProcess:
             l = None
         return l
 
-def main():
-    from argparse import ArgumentParser
-    parser = ArgumentParser()
-    parser.add_argument('-n', nargs=1, default=[1], type=int)
-    parser.add_argument('-a', nargs=1, default=['dont_set'], choices=['dont_set', 'set'])
-    parser.add_argument('-l', nargs=1, default=[0.6], type=float)
-    parser.add_argument('-o', nargs=1, default=[0], type=int)
-    args = parser.parse_args()
-
-    n = args.n[0]
-
-    proc = map(lambda a: LoadProcess("./a.out", str(args.l[0])), range(n))
-    data = map(lambda a: [0,0,0,0], range(n))
-
-    if args.a == 'set':
-        from multiprocessing import cpu_count
-        from schedutils      import set_affinity
-        cpus = cpu_count()
-        i = 0
-        for p in proc:
-            set_affinity(p.pid, [i])
-            i += 1
+def the_loop(proc, args):
+    from time import sleep
+    data = map(lambda a: [0,0,0,0], range(args.n[0]))
 
     while True:
         i = 0
         got_something = False
         for p in proc:
             from Queue import Empty
-            from time import sleep
-
             l = p.get_nowait()
             if l != None:
                 from StringIO import StringIO
@@ -94,16 +75,46 @@ def main():
         if not got_something:
             sleep(0.6)
         else:
-            print map(lambda l: (l[2], l[2] - l[3], l[4]), data)
-            #print data
+            #print map(lambda l: (0,0,0,0,0) if len(l) < 5 else (l[2], l[2] - l[3], l[4]), data)
             if args.o[0] > 0:
-                if sum(map(lambda l: l[4], data)) > args.o[0]:
-                    from os import killpg
-                    from signal import SIGTERM
+                if sum(map(lambda l: 0 if len(l) < 5 else l[4], data)) > args.o[0]:
                     print 'Reached %i operations, exiting...' % args.o[0]
-                    map(lambda p: killpg(p.process.pid, SIGTERM), proc)
                     return
 
+def main():
+    from argparse import ArgumentParser
+    parser = ArgumentParser()
+    parser.add_argument('-n', nargs=1, default=[1], type=int, description="Number of processes to start")
+    parser.add_argument('-a', nargs=1, default=['dont_set'], choices=['dont_set', 'set'], description="Affinity setting")
+    parser.add_argument('-l', nargs=1, default=[0.6], type=float, description="The load to set on processes")
+    parser.add_argument('-o', nargs=1, default=[0], type=int, description="Total number of operations to perform before exiting")
+    args = parser.parse_args()
+
+    n = args.n[0]
+
+    proc = map(lambda a: LoadProcess("./a.out", str(args.l[0])), range(n))
+
+    if args.a == 'set':
+        from multiprocessing import cpu_count
+        from schedutils      import set_affinity
+        cpus = cpu_count()
+        i = 0
+        for p in proc:
+            set_affinity(p.pid, [i])
+            i += 1
+
+    try:
+        the_loop(proc, args)
+    finally:
+        from os import killpg
+        from signal import SIGTERM
+        from datetime import datetime
+        start_time = min(map(lambda p: p.start_time, proc))
+        end_time   = datetime.now()
+        print "Configuration:", args
+        print "Total running time:", end_time - start_time
+        print "Killing processes..."
+        map(lambda p: killpg(p.process.pid, SIGTERM), proc)
 
 if __name__ == '__main__':
     main()
