@@ -68,6 +68,15 @@ double get_double_rusage_time()
 	return TIMEVAL_TO_DOUBLE(r.ru_utime);
 }
 
+double get_double_clock_res()
+{
+	struct timespec ts;
+
+	clock_getres(CLOCK_REALTIME, &ts);
+
+	return ts.tv_sec + ts.tv_nsec/1000000000.0;
+}
+
 int main(int argc, char **argv)
 {
 	int i, j;
@@ -81,6 +90,8 @@ int main(int argc, char **argv)
 	double frt2;
 	double ft_diff;
 	double frt_diff;
+
+	double clock_res = MIN_SLEEP_LENGTH;
 
 	double t_o = 0.0;
 	
@@ -107,6 +118,9 @@ int main(int argc, char **argv)
 			return -1;
 		}
 	}
+
+	//clock_res = get_double_clock_res();
+	printf("clock_res = %f\n", clock_res);
 
 	while (1) {
 		ft1 = get_double_time();
@@ -141,7 +155,7 @@ int main(int argc, char **argv)
 
 		double t_i = k * t_o;
 
-		loop_n = ceil(MIN_SLEEP_LENGTH/t_i);
+		loop_n = ceil(clock_res/t_i);
 
 		fdelay = (double)loop_n * t_i;
 
