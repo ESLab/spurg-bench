@@ -29,7 +29,7 @@ int operation()
 {
 	int i;
 	double a = 2.0;
-	for (i = 0; i < 100000; i++) {
+	for (i = 0; i < 1000; i++) {
 		a *= 2.0;
 	}
 	return 0;
