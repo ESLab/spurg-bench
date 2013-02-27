@@ -54,7 +54,7 @@ class LoadProcess:
 
 def the_loop(proc, args):
     from time import sleep
-    data = map(lambda a: [0,0,0,0], range(args.n[0]))
+    data = map(lambda a: [0,0,0,0], range(args['n']))
 
     while True:
         i = 0
@@ -76,25 +76,17 @@ def the_loop(proc, args):
             sleep(0.6)
         else:
             #print map(lambda l: (0,0,0,0,0) if len(l) < 5 else (l[2], l[2] - l[3], l[4]), data)
-            if args.o[0] > 0:
-                if sum(map(lambda l: 0 if len(l) < 5 else l[4], data)) > args.o[0]:
-                    print 'Reached %i operations, exiting...' % args.o[0]
+            if args['o'] > 0:
+                if sum(map(lambda l: 0 if len(l) < 5 else l[4], data)) > args['o']:
+                    print 'Reached %i operations, exiting...' % args['o']
                     return
 
-def main():
-    from argparse import ArgumentParser
-    parser = ArgumentParser()
-    parser.add_argument('-n', nargs=1, default=[1], type=int, help="Number of processes to start")
-    parser.add_argument('-a', nargs=1, default=['dont_set'], choices=['dont_set', 'set'], help="Affinity setting")
-    parser.add_argument('-l', nargs=1, default=[0.6], type=float, help="The load to set on processes")
-    parser.add_argument('-o', nargs=1, default=[0], type=int, help="Total number of operations to perform before exiting")
-    args = parser.parse_args()
+def run_test(args):
 
-    n = args.n[0]
+    n = args['n']
+    proc = map(lambda a: LoadProcess("./a.out", str(args['l'])), range(n))
 
-    proc = map(lambda a: LoadProcess("./a.out", str(args.l[0])), range(n))
-
-    if args.a == 'set':
+    if args['a'] == 'set':
         from multiprocessing import cpu_count
         from schedutils      import set_affinity
         cpus = cpu_count()
@@ -115,6 +107,26 @@ def main():
         print "Total running time:", end_time - start_time
         print "Killing processes..."
         map(lambda p: killpg(p.process.pid, SIGTERM), proc)
+        print "Joining threads..."
+        map(lambda p: p.thread.join(), proc)
+        ret = end_time - start_time
+        ret = ret.days*24*60*60 + ret.seconds + ret.microseconds*(10**-6)
+        return ret
+
+def main():
+    from argparse import ArgumentParser
+    parser = ArgumentParser()
+    parser.add_argument('-n', nargs=1, default=[1], type=int, help="Number of processes to start")
+    parser.add_argument('-a', nargs=1, default=['dont_set'], choices=['dont_set', 'set'], help="Affinity setting")
+    parser.add_argument('-l', nargs=1, default=[0.6], type=float, help="The load to set on processes")
+    parser.add_argument('-o', nargs=1, default=[0], type=int, help="Total number of operations to perform before exiting")
+    args = parser.parse_args()
+
+    run_test({'n': args.n[0],
+              'a': args.a[0],
+              'l': args.l[0],
+              'o': args.o[0]})
+
 
 if __name__ == '__main__':
     main()
