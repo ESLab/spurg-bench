@@ -119,9 +119,6 @@ int main(int argc, char **argv)
 		}
 	}
 
-	//clock_res = get_double_clock_res();
-	printf("clock_res = %f\n", clock_res);
-
 	while (1) {
 		ft1 = get_double_time();
 		frt1 = get_double_rusage_time();
