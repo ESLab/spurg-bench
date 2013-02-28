@@ -97,6 +97,8 @@ def run_test(args):
 
     try:
         the_loop(proc, args)
+    except Exception as e:
+        print "Error:", e
     finally:
         from os import killpg
         from signal import SIGTERM
