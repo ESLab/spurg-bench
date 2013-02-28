@@ -84,7 +84,7 @@ def the_loop(proc, args):
 def run_test(args):
 
     n = args['n']
-    proc = map(lambda a: LoadProcess("./a.out", str(args['l'])), range(n))
+    proc = map(lambda a: LoadProcess("../build/reg_to_rusage_load_float_mult_op", str(args['l'])), range(n))
 
     if args['a'] == 'set':
         from multiprocessing import cpu_count
