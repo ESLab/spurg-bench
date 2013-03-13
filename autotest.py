@@ -43,6 +43,22 @@ class TemperatureLogger:
         self.thread.daemon = True
         self.thread.start()
 
+class OnlineCPULogger:
+    def run_thread(self):
+        from time import sleep
+        temp_file = '/sys/devices/system/cpu/online'
+        while True:
+            with open(temp_file) as f:
+                d = f.read()
+                self.online_cpus = d
+            sleep(1.0)
+    def __init__(self):
+        from threading import Thread
+        from functools import partial
+        self.thread = Thread(target=partial(OnlineCPULogger.run_thread, self))
+        self.thread.daemon = True
+        self.thread.start()
+
 class PowerSerialLogger:
     def run_thread(self):
         from StringIO import StringIO
@@ -111,14 +127,14 @@ def get_kernel_olord_settings():
     sys_kernel_olord_path = "/proc/sys/kernel/"
     ret = {}
     for name in proc_sys_kernel_olord_files:
-        ret[name] = read_maybe(sys_kernel_olord_path + name, maybe_str="???")
+        ret[name] = read_maybe(sys_kernel_olord_path + name, maybe_str="0.0")
     return ret
 
 def get_ondemand_settings():
     sys_ondemand_path = "/sys/devices/system/cpu/cpufreq/ondemand/"
     ret = {}
     for name in sys_ondemand_files:
-        ret[name] = read_maybe(sys_ondemand_path + name, maybe_str="???")
+        ret[name] = read_maybe(sys_ondemand_path + name, maybe_str="0.0")
     return ret
 
 def get_smt_mc_power_savings():
@@ -154,6 +170,13 @@ def get_governor_string():
             ret += d + " "
     return ret
 
+def set_config_file(filename, val):
+    try:
+        with open(filename, "w") as f:
+            f.write(str(val))
+    except IOError as e:
+        print "Could not write to file", filename
+
 def parse_arguments():
     return {}
 
@@ -164,13 +187,19 @@ def main():
     from sqlalchemy import String, Integer, Float
     from sqlalchemy.orm import sessionmaker, mapper
     from sqlalchemy.ext.declarative import declarative_base
-    from time import sleep
+    from time import sleep, time
     from stat_reader import StatReader
+    from itertools import product as set_product
+    from os import getuid
     engine = create_engine('sqlite:///auto_test_log.sqlite')
     metadata = MetaData(bind=engine)
     Session = sessionmaker(bind=engine)
     session = Session()
     Base = declarative_base()
+
+    if getuid() != 0:
+        print "Must be root!!"
+        return
 
     experiment_info = Table('experiment_info', metadata,
                             Column('experiment_id', String(32), primary_key=True),
@@ -198,7 +227,8 @@ def main():
                             Column('voltage', Float),
                             Column('current', Float),
                             Column('power', Float),
-                            Column('temperature', Float))
+                            Column('temperature', Float),
+                            Column('cpus_online', String(10)))
 
     metadata.create_all()
 
@@ -213,13 +243,13 @@ def main():
 
     psl = PowerSerialLogger()
     tl  = TemperatureLogger()
+    ocl = OnlineCPULogger()
 
     def perform_experiment_a(experiment_config):
         from md5 import new as new_md5
         from pickle import dumps as pickle_dump
         from platform import uname
         from datetime import datetime
-        from time import time
         from threading import Thread
         from pprint import PrettyPrinter
         from simple_run import run_test
@@ -268,7 +298,8 @@ def main():
                          'voltage': psl.voltage,
                          'current': psl.current,
                          'power': psl.power,
-                         'temperature': tl.temperature}
+                         'temperature': tl.temperature,
+                         'cpus_online': ocl.online_cpus}
             eid.execute(data_dict)
             sleep_time = 1.0 - time() + (t + start_time)
             sleep_time = 0.0 if (sleep_time < 0) else sleep_time
@@ -281,25 +312,38 @@ def main():
         r.total_time = float(tt.total_time)
         session.commit()
 
-    for i in range(10):
+    iter_set = set_product([80],
+                           [10],
+                           [10],
+                           [30],
+                           [80],
+                           range(90,9,-5),
+                           range(10))
+
+    iter_set = list(iter_set)
+    test_size = len(iter_set)
+
+    start_time = time()
+    counter = 0
+    for i in iter_set:
         sleep(10.0)
-        perform_experiment_a({'scheduler': 'OGS',
-                              'target_load_level': 0.8,
-                              'num_of_process': 4,
-                              'num_of_ops': 100000})
-        sleep(10.0)
-        perform_experiment_a({'scheduler': 'OGS',
-                              'target_load_level': 0.6,
-                              'num_of_process': 4,
-                              'num_of_ops': 100000})
-        sleep(10.0)
-        perform_experiment_a({'scheduler': 'OGS',
-                              'target_load_level': 0.4,
-                              'num_of_process': 4,
-                              'num_of_ops': 100000})
-        sleep(10.0)
-        perform_experiment_a({'scheduler': 'OGS',
-                              'target_load_level': 0.2,
+        if psl.power < 0.1:
+            print "Power ridiculously small, check connection to power source."
+            return
+        set_config_file('/sys/devices/system/cpu/cpufreq/ondemand/hotplug_in_load_limit', i[0])
+        set_config_file('/sys/devices/system/cpu/cpufreq/ondemand/hotplug_out_load_limit', i[1])
+        set_config_file('/sys/devices/system/cpu/cpufreq/ondemand/hotplug_in_sampling_period', i[2])
+        set_config_file('/sys/devices/system/cpu/cpufreq/ondemand/hotplug_out_sampling_period', i[2])
+        set_config_file('/sys/devices/system/cpu/cpufreq/ondemand/up_threshold', i[3])
+        set_config_file('/proc/sys/kernel/sched_olord_lb_upper_limit', i[4])
+        counter += 1
+        print "Starting test #%i of ~%i" % (counter, test_size)
+        t = time() - start_time
+        r = float(counter) / float(test_size)
+        eta = t/r - t
+        print "Estimated time left:", eta, "s"
+        perform_experiment_a({'scheduler': 'CFS',
+                              'target_load_level': i[5]/100.0,
                               'num_of_process': 4,
                               'num_of_ops': 100000})
 
