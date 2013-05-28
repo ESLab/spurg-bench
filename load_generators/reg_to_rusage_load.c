@@ -42,7 +42,7 @@
 #define MIN_SLEEP_LENGTH (0.001)
 #define MAX_SLEEP_LENGTH (0.002)
 
-#define LOOP_M 100
+#define LOOP_M 1000
 
 #define RATIO (0.8)
 
@@ -143,9 +143,8 @@ int main(int argc, char **argv)
 		printf("%f, %f, %f, %f, %i\n", ft_diff, fdelay, ops, (double)total_nops / ftotal_time, total_nops);
 		fflush(stdout);
 
-
 		double t_m = frt_diff;
-		//t_o = t_m / (double)(loop_m * loop_n);
+
 		t_o = ALPHA_T_O*(t_m / (double)(loop_m * loop_n)) + (1.0 - ALPHA_T_O)*t_o;
 		
 		double k = (1-load_ratio)/load_ratio;
